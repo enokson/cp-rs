@@ -1,5 +1,8 @@
 use clap::{Arg, App};
-use std::{path::PathBuf, str::FromStr};
+use std::{
+    path::PathBuf, 
+    str::FromStr,
+};
 
 fn main() {
 
@@ -29,7 +32,7 @@ fn main() {
 
 mod lib {
   use crossterm::{execute, cursor, terminal, style};
-  use std::{io::{Stdout, Write, stdout, BufWriter}, str::FromStr};
+  use std::{fs::remove_file, io::{Stdout, Write, stdout, BufWriter}, str::FromStr};
   use std::collections::HashMap;
   use std::sync::{Arc, Mutex};
   use std::fs;
@@ -189,8 +192,10 @@ mod lib {
 
     let tmp_error = PathBuf::from_str("/tmp/cp-rs-errors").unwrap();
     if tmp_error.exists() {
-      // fs::remove_dir(&tmp_error).unwrap()
+        remove_file(&tmp_error).expect("Could not remove old error log file.");
     }
+    
+    let error_file = fs::File::create(tmp_error).expect("Could not locate /tmp/cp-rs-errors");
 
     let main_state = Arc::new(State {
       src: Mutex::new(src.to_path_buf()),
@@ -199,7 +204,7 @@ mod lib {
       next_id: Mutex::new(0),
       workers: Mutex::new(HashMap::new()),
       stdout: Mutex::new(stdout()),
-      stderror: Mutex::new(fs::File::open(tmp_error).expect("Could not locate /tmp/cp-rs-errors")),
+      stderror: Mutex::new(error_file),
       entries_processed: Mutex::new(0)
     });
 
