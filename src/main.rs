@@ -11,6 +11,7 @@ fn main() {
     .author("Joshua Enokson <kilograhm@pm.me>")
     .about("Copies files in concurency")
     .arg(Arg::new("src")
+         .multiple(true)
         .about("Sets the src dir to use")
         .required(true)
         .index(1))
@@ -20,26 +21,34 @@ fn main() {
       .index(2))
     .get_matches();
 
-  let src = PathBuf::from_str(matches.value_of("src").unwrap()).unwrap();
-  let dest = PathBuf::from_str(matches.value_of("dest").unwrap()).unwrap();
-  // let src = PathBuf::from_str("/home/joshua/Dropbox").unwrap();
-  // let dest = PathBuf::from_str("/tmp/Documents").unwrap();
+  let sources: Vec<PathBuf> = matches
+      .values_of("src")
+      .unwrap()
+      .into_iter()
+      .map(|value| PathBuf::from_str(value).unwrap())
+      .collect();
 
-  lib::main(src, dest);
+
+  let dest = PathBuf::from_str(matches.value_of("dest").unwrap()).unwrap();
+
+  lib::main(sources, dest);
 
 }
 
 
 mod lib {
   use crossterm::{execute, cursor, terminal, style};
-  use std::{fs::remove_file, io::{Stdout, Write, stdout, BufWriter}, str::FromStr};
+  use std::io::{Stdout, Write, stdout};
   use std::collections::HashMap;
   use std::sync::{Arc, Mutex};
   use std::fs;
   use std::path::PathBuf;
+  use std::process;
   use std::thread;
   use num_cpus;
-  // use std::time::Duration;
+
+   use syslog::{Facility, Formatter3164, BasicLogger};
+   use log::{LevelFilter, error};
 
   #[derive(Debug, PartialEq, Eq)]
   pub enum Task {
@@ -61,34 +70,31 @@ mod lib {
 
   #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
   pub enum Entry {
-    File(PathBuf),
-    Dir(PathBuf)
+    File(PathBuf, PathBuf), // source, dest
+    Dir(PathBuf, PathBuf) // source, dest
   }
 
   pub struct Worker {
-    id: u16,
     task: Task
   }
 
   pub struct State {
-    pub src: Mutex<PathBuf>,
+    pub sources: Mutex<Vec<PathBuf>>,
     pub dest: Mutex<PathBuf>,
     pub entries: Mutex<Vec<Entry>>,
     pub next_id: Mutex<u16>,
     pub workers: Mutex<HashMap<u16, Worker>>,
     pub stdout: Mutex<Stdout>,
-    pub stderror: Mutex<fs::File>,
+    // pub logger: Mutex<Logger<LoggerBackend, Formatter3164>>,
+    // pub stderror: Mutex<fs::File>,
     pub entries_processed: Mutex<u64>
   }
 
-  pub fn send_to_error(state: Arc<State>, error: String) {
-    let mut file = state.stderror.lock().unwrap();
-    let file_ref = file.by_ref();
-    let mut writer = BufWriter::new(file_ref);
-    writer.write(format!("{}\n", error.to_string()).as_bytes()).unwrap();
+  pub fn send_to_error(_state: Arc<State>, msg: String) {
+      error!("{}", msg);
   }
 
-  pub fn read_dir(dir: &PathBuf, state: Arc<State>) -> Vec<Entry> {
+  pub fn read_dir(src: &PathBuf, dir: &PathBuf, state: Arc<State>) -> Vec<Entry> {
     let mut entries = vec![];
     match fs::read_dir(dir) {
       Ok(read_dir) => {
@@ -97,9 +103,9 @@ mod lib {
             Ok(entry) => match entry.file_type() {
               Ok(file_type) => {
                 if file_type.is_dir() {
-                  entries.push(Entry::Dir(entry.path()))
+                  entries.push(Entry::Dir(src.to_path_buf(), entry.path()))
                 } else if file_type.is_file() {
-                  entries.push(Entry::File(entry.path()))
+                  entries.push(Entry::File(src.to_path_buf(), entry.path()))
                 }
               },
               Err(error) => send_to_error(state.clone(), error.to_string())
@@ -188,35 +194,55 @@ mod lib {
     stdout.flush().unwrap();
   }
 
-  pub fn main(src: PathBuf, dest: PathBuf) {
+  pub fn main(sources: Vec<PathBuf>, dest: PathBuf) {
 
-    let tmp_error = PathBuf::from_str("/tmp/cp-rs-errors").unwrap();
-    if tmp_error.exists() {
-        remove_file(&tmp_error).expect("Could not remove old error log file.");
-    }
+    let formatter = Formatter3164 {
+        facility: Facility::LOG_USER,
+        hostname: None,
+        process: "cp-rs".into(),
+        pid: process::id() as i32
+    };
+
+    let logger = syslog::unix(formatter)
+        .expect("could not connect to syslog");
+    log::set_boxed_logger(Box::new(BasicLogger::new(logger)))
+            .map(|()| log::set_max_level(LevelFilter::Info)).unwrap();
+
+
+    // let tmp_error = PathBuf::from_str("/tmp/cp-rs-errors").unwrap();
+    // if tmp_error.exists() {
+    //     remove_file(&tmp_error).expect("Could not remove old error log file.");
+    // }
     
-    let error_file = fs::File::create(tmp_error).expect("Could not locate /tmp/cp-rs-errors");
+    // let error_file = fs::File::create(tmp_error).expect("Could not locate /tmp/cp-rs-errors");
+    
+    let entries: Vec<Entry> = sources
+        .iter()
+        .map(|value| {
+            if value.is_dir() {
+                return Entry::Dir(value.to_path_buf(), value.to_path_buf())
+            } else if value.is_file() {
+                return Entry::File(value.to_path_buf(), value.to_path_buf())
+            } else {
+                panic!("Entry found is neither a file or directory");
+            }
+        })
+        .collect();
 
     let main_state = Arc::new(State {
-      src: Mutex::new(src.to_path_buf()),
+      sources: Mutex::new(sources),
       dest: Mutex::new(dest.to_path_buf()),
-      entries: Mutex::new(vec![]),
+      entries: Mutex::new(entries),
       next_id: Mutex::new(0),
       workers: Mutex::new(HashMap::new()),
       stdout: Mutex::new(stdout()),
-      stderror: Mutex::new(error_file),
+      // logger: Mutex::new(logger),
+      // stderror: Mutex::new(error_file),
       entries_processed: Mutex::new(0)
     });
 
     const PADDING: u16 = 3;
     let cpu_count = num_cpus::get() as u64;
-    
-    {
-      let mut first_batch = read_dir(&src, main_state.clone());
-      // println!("vec: {:#?}", &first_batch);
-      let mut entries = main_state.entries.lock().unwrap();
-      entries.append(&mut first_batch);
-    }
 
     let entry_count = {
       main_state.entries.lock().unwrap().len() as u64
@@ -248,7 +274,6 @@ mod lib {
           id
         };
         let worker = Worker {
-          id,
           task: Task::Initalizing
         };
         {
@@ -256,9 +281,6 @@ mod lib {
           workers.insert(id, worker);
         }
         update_task(&id, Task::Initalizing, &PADDING, state.clone());
-        let src = {
-          state.src.lock().unwrap().to_path_buf()
-        };
         let dest = {
           state.dest.lock().unwrap().to_path_buf()
         };
@@ -269,11 +291,11 @@ mod lib {
             };
             match entry_options {
               Some(entry) => match entry {
-                Entry::Dir(dir) => {
+                Entry::Dir(src, dir) => {
                   update_task(&id, Task::Scanning(dir.to_path_buf()), &PADDING, state.clone());
                   // thread::sleep(Duration::from_secs(2));
                   mk_dir(&src, &dest, &dir, state.clone());
-                  let mut new_entries = read_dir(&dir, state.clone());
+                  let mut new_entries = read_dir(&src, &dir, state.clone());
                   {
                     let mut entries = state.entries.lock().unwrap();
                     entries.append(&mut new_entries);
@@ -284,7 +306,7 @@ mod lib {
                   };
                   update_totals(state.clone())
                 },
-                Entry::File(file) => {
+                Entry::File(src, file) => {
                   update_task(&id, Task::Coping(file.to_path_buf()), &PADDING, state.clone());
                   // thread::sleep(Duration::from_secs(2));
                   cp_file(&src, &dest, &file, state.clone());
@@ -329,5 +351,4 @@ mod lib {
       }
 
   }
-
 }
