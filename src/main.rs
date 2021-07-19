@@ -193,7 +193,6 @@ mod lib {
     let tmp_error = PathBuf::from_str("/tmp/cp-rs-errors").unwrap();
     if tmp_error.exists() {
         remove_file(&tmp_error).expect("Could not remove old error log file.");
-      // fs::remove_dir(&tmp_error).unwrap()
     }
     
     let error_file = fs::File::create(tmp_error).expect("Could not locate /tmp/cp-rs-errors");
