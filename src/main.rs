@@ -207,14 +207,6 @@ mod lib {
         .expect("could not connect to syslog");
     log::set_boxed_logger(Box::new(BasicLogger::new(logger)))
             .map(|()| log::set_max_level(LevelFilter::Info)).unwrap();
-
-
-    // let tmp_error = PathBuf::from_str("/tmp/cp-rs-errors").unwrap();
-    // if tmp_error.exists() {
-    //     remove_file(&tmp_error).expect("Could not remove old error log file.");
-    // }
-    
-    // let error_file = fs::File::create(tmp_error).expect("Could not locate /tmp/cp-rs-errors");
     
     let entries: Vec<Entry> = sources
         .iter()
@@ -236,8 +228,6 @@ mod lib {
       next_id: Mutex::new(0),
       workers: Mutex::new(HashMap::new()),
       stdout: Mutex::new(stdout()),
-      // logger: Mutex::new(logger),
-      // stderror: Mutex::new(error_file),
       entries_processed: Mutex::new(0)
     });
 
