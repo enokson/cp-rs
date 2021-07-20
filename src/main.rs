@@ -204,6 +204,12 @@ mod lib {
 
         let mut entries: Vec<Entry> = vec![];
 
+        if entries.len() > 1 {
+            if dest.is_file() {
+                panic!("If there are multiple sources, the desination must be a directory.");
+            }
+        }
+
         for entry in &sources {
             if entry.is_dir() {
                 entries.push(Entry::Dir(entry.parent().unwrap().to_path_buf(), entry.to_path_buf()));
