@@ -129,6 +129,19 @@ mod lib {
         }
     }
 
+    fn mk_top_level_dir(src: &PathBuf, dest: &PathBuf) {
+        let file_name_str = src
+            .file_name()
+            .expect("Could not get file name")
+            .to_str()
+            .expect("could not convert file to string");
+        let file_name_path = PathBuf::from(file_name_str);
+        let final_dest = dest.join(file_name_path);
+        if let Err(_error) = fs::create_dir_all(final_dest) {
+            // send_to_error(state.clone(), error.to_string())
+        }
+    }
+
     pub fn cp_file(src: &PathBuf, dest: &PathBuf, file: &PathBuf, state: Arc<State>) {
         let new_dest = get_dest(src, dest, file);
         if let Err(error) = fs::copy(file, new_dest) {
@@ -202,18 +215,17 @@ mod lib {
             .map(|()| log::set_max_level(LevelFilter::Info))
             .unwrap();
 
-        let entries: Vec<Entry> = sources
-            .iter()
-            .map(|value| {
-                if value.is_dir() {
-                    return Entry::Dir(value.to_path_buf(), value.to_path_buf());
-                } else if value.is_file() {
-                    return Entry::File(value.to_path_buf(), value.to_path_buf());
-                } else {
-                    panic!("Entry found is neither a file or directory");
-                }
-            })
-            .collect();
+        let mut entries: Vec<Entry> = vec![];
+
+        for entry in &sources {
+            if entry.is_dir() {
+                entries.push(Entry::Dir(entry.parent().unwrap().to_path_buf(), entry.to_path_buf()));
+            } else if entry.is_file() {
+                entries.push(Entry::File(entry.parent().unwrap().to_path_buf(), entry.to_path_buf()));
+            } else {
+                panic!("Entry found is neither a file or directory");
+            }
+        }
 
         let main_state = Arc::new(State {
             sources: Mutex::new(sources),
