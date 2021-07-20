@@ -129,19 +129,6 @@ mod lib {
         }
     }
 
-    fn mk_top_level_dir(src: &PathBuf, dest: &PathBuf) {
-        let file_name_str = src
-            .file_name()
-            .expect("Could not get file name")
-            .to_str()
-            .expect("could not convert file to string");
-        let file_name_path = PathBuf::from(file_name_str);
-        let final_dest = dest.join(file_name_path);
-        if let Err(_error) = fs::create_dir_all(final_dest) {
-            // send_to_error(state.clone(), error.to_string())
-        }
-    }
-
     pub fn cp_file(src: &PathBuf, dest: &PathBuf, file: &PathBuf, state: Arc<State>) {
         let new_dest = get_dest(src, dest, file);
         if let Err(error) = fs::copy(file, new_dest) {
