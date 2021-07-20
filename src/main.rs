@@ -202,17 +202,22 @@ mod lib {
             .map(|()| log::set_max_level(LevelFilter::Info))
             .unwrap();
 
-        let mut entries: Vec<Entry> = vec![];
-
-        if entries.len() > 1 {
+        if sources.len() > 1 {
             if dest.is_file() {
                 panic!("If there are multiple sources, the desination must be a directory.");
             }
         }
 
+        let mut entries: Vec<Entry> = vec![];
+
         for entry in &sources {
             if entry.is_dir() {
-                entries.push(Entry::Dir(entry.parent().unwrap().to_path_buf(), entry.to_path_buf()));
+                let path_str = entry.to_str().expect("Could not get path_str");
+                if path_str.ends_with("/") {
+                    entries.push(Entry::Dir(entry.to_path_buf(), entry.to_path_buf()));
+                } else {
+                    entries.push(Entry::Dir(entry.parent().unwrap().to_path_buf(), entry.to_path_buf()));
+                }
             } else if entry.is_file() {
                 entries.push(Entry::File(entry.parent().unwrap().to_path_buf(), entry.to_path_buf()));
             } else {
