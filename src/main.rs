@@ -9,13 +9,13 @@ fn main() {
         .arg(
             Arg::new("src")
                 .multiple(true)
-                .about("Sets the src dir to use")
+//                .about("Sets the src dir to use")
                 .required(true)
                 .index(1),
         )
         .arg(
             Arg::new("dest")
-                .about("Sets the dest dir to use")
+//                .about("Sets the dest dir to use")
                 .required(true)
                 .index(2),
         )
