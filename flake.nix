@@ -1,14 +1,23 @@
 {
-  description = "A multi-threaded copier";
-
-  inputs.flake-utils.url = "github:numtide/flake-utils";
-
-  outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachDefaultSystem
-      (system:
-        let pkgs = nixpkgs.legacyPackages.${system}; in
-        {
-          devShells.default = import ./shell.nix { inherit pkgs; };
-        }
-      );
+  description = "cp-rs";
+  inputs = {
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+  };
+  outputs = { self, nixpkgs }:
+    let
+      supportedSystems = [ 
+        "x86_64-linux"
+        # add other supported systems here
+      ];
+      forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
+      pkgsFor = nixpkgs.legacyPackages;
+    in {
+      packages = forAllSystems (system: {
+        default = pkgsFor.${system}.callPackage ./. { };
+      });
+      devShells = forAllSystems (system: {
+        default = pkgsFor.${system}.callPackage ./shell.nix { };
+      });
+    };
 }
+
